@@ -446,27 +446,38 @@
                 }
             };
             box.querySelectorAll('.connection-point').forEach(p => {
-                p.onclick = e => {
+                p.addEventListener('mousedown', e => e.stopPropagation());
+                p.addEventListener('click', e => {
                     e.stopPropagation();
+                    e.preventDefault();
                     if(!connectMode) return;
+                    
                     const id = parseInt(p.dataset.id);
                     const pos = p.dataset.pos;
                     const a = apps.find(x => x.id===id);
+                    
                     if(!connectStart) {
                         connectStart = {app:a, pos};
-                        p.classList.add('active');
+                        document.querySelectorAll('.connection-point').forEach(pt => {
+                            pt.style.background = '#6366f1';
+                        });
                         p.style.background = '#22c55e';
                     } else if(connectStart.app.id !== id) {
                         connections.push({from:connectStart, to:{app:a, pos}});
                         connectStart = null;
                         document.querySelectorAll('.connection-point').forEach(pt => {
-                            pt.classList.remove('active');
                             pt.style.background = '#6366f1';
                         });
                         saveToStorage();
                         drawLines();
+                    } else {
+                        // Same app clicked, cancel
+                        connectStart = null;
+                        document.querySelectorAll('.connection-point').forEach(pt => {
+                            pt.style.background = '#6366f1';
+                        });
                     }
-                };
+                });
             });
             document.getElementById('canvas').appendChild(box);
             
@@ -515,12 +526,18 @@
             const box = document.getElementById('app-'+app.id);
             if(!box) return {x:0,y:0};
             const r = box.getBoundingClientRect();
-            const cx = r.left + r.width/2;
-            const cy = r.top + r.height/2;
-            if(pos==='top') return {x:cx, y:r.top};
-            if(pos==='right') return {x:r.right, y:cy};
-            if(pos==='bottom') return {x:cx, y:r.bottom};
-            return {x:r.left, y:cy};
+            const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+            
+            // Calculate position relative to canvas, accounting for zoom
+            const relX = (r.left - canvasRect.left) / zoomLevel;
+            const relY = (r.top - canvasRect.top) / zoomLevel;
+            const w = r.width / zoomLevel;
+            const h = r.height / zoomLevel;
+            
+            if(pos==='top') return {x: relX + w/2, y: relY};
+            if(pos==='right') return {x: relX + w, y: relY + h/2};
+            if(pos==='bottom') return {x: relX + w/2, y: relY + h};
+            return {x: relX, y: relY + h/2};
         }
 
         function drawLines() {
