@@ -357,10 +357,14 @@
                 Object.assign(editingApp, {name, description:desc, icon, color:selectedColor, shape:selectedShape, width, height});
                 updateBox(editingApp);
             } else {
-                // Create app at current viewport center
+                // Create app at current viewport center (accounting for zoom)
                 const container = document.querySelector('.canvas-container');
-                const centerX = (container.scrollLeft + container.clientWidth / 2) / zoomLevel;
-                const centerY = (container.scrollTop + container.clientHeight / 2) / zoomLevel;
+                const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+                
+                // Calculate center of visible area in canvas coordinates
+                const viewportCenterX = container.scrollLeft + (containerRect.width / 2);
+                const viewportCenterY = container.scrollTop + (containerRect.height / 2);
                 
                 const app = {
                     id:idCounter++, 
@@ -371,8 +375,8 @@
                     shape:selectedShape, 
                     width, 
                     height, 
-                    x: centerX - width/2, 
-                    y: centerY - height/2
+                    x: viewportCenterX - width/2, 
+                    y: viewportCenterY - height/2
                 };
                 apps.push(app);
                 createBox(app);
@@ -501,6 +505,10 @@
             connectMode = !connectMode;
             document.getElementById('connectBtn').textContent = 'Connect: ' + (connectMode?'ON':'OFF');
             connectStart = null;
+            document.querySelectorAll('.connection-point').forEach(p => {
+                p.classList.remove('active');
+                p.style.background = '#6366f1';
+            });
         }
 
         function getPoint(app, pos) {
