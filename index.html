@@ -55,8 +55,8 @@
         }
         .canvas {
             position: relative;
-            width: 10000px;
-            height: 10000px;
+            width: 20000px;
+            height: 20000px;
             background-image: 
                 linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
@@ -357,7 +357,23 @@
                 Object.assign(editingApp, {name, description:desc, icon, color:selectedColor, shape:selectedShape, width, height});
                 updateBox(editingApp);
             } else {
-                const app = {id:idCounter++, name, description:desc, icon, color:selectedColor, shape:selectedShape, width, height, x:500, y:500};
+                // Create app at current viewport center
+                const container = document.querySelector('.canvas-container');
+                const centerX = (container.scrollLeft + container.clientWidth / 2) / zoomLevel;
+                const centerY = (container.scrollTop + container.clientHeight / 2) / zoomLevel;
+                
+                const app = {
+                    id:idCounter++, 
+                    name, 
+                    description:desc, 
+                    icon, 
+                    color:selectedColor, 
+                    shape:selectedShape, 
+                    width, 
+                    height, 
+                    x: centerX - width/2, 
+                    y: centerY - height/2
+                };
                 apps.push(app);
                 createBox(app);
             }
@@ -434,9 +450,15 @@
                     const a = apps.find(x => x.id===id);
                     if(!connectStart) {
                         connectStart = {app:a, pos};
+                        p.classList.add('active');
+                        p.style.background = '#22c55e';
                     } else if(connectStart.app.id !== id) {
                         connections.push({from:connectStart, to:{app:a, pos}});
                         connectStart = null;
+                        document.querySelectorAll('.connection-point').forEach(pt => {
+                            pt.classList.remove('active');
+                            pt.style.background = '#6366f1';
+                        });
                         saveToStorage();
                         drawLines();
                     }
@@ -444,13 +466,7 @@
             });
             document.getElementById('canvas').appendChild(box);
             
-            // Scroll to show the new app
-            const container = document.querySelector('.canvas-container');
-            container.scrollTo({
-                left: app.x - 200,
-                top: app.y - 200,
-                behavior: 'smooth'
-            });
+            // DON'T scroll - keep current position
         }
 
         function updateBox(app) {
@@ -566,14 +582,7 @@
                 
                 drawLines();
                 
-                // Scroll to first app if any exist
-                if(apps.length > 0) {
-                    const firstApp = apps[0];
-                    container.scrollTo({
-                        left: firstApp.x - 200,
-                        top: firstApp.y - 200
-                    });
-                }
+                // DON'T auto-scroll on load - keep default position
             } catch(e) {
                 console.error('Failed to load saved data:', e);
             }
