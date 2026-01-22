@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture Diagram Builder</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1d35 100%);
+            color: #e0e6ed;
+            overflow: hidden;
+            height: 100vh;
+        }
+        .toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 20, 40, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+            padding: 15px 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            z-index: 1000;
+        }
+        .btn {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-secondary { background: linear-gradient(135deg, #374151 0%, #4b5563 100%); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+        .canvas-container {
+            position: absolute;
+            top: 70px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: auto;
+            cursor: grab;
+        }
+        .canvas-container.panning {
+            cursor: grabbing;
+        }
+        .canvas {
+            position: relative;
+            width: 10000px;
+            height: 10000px;
+            background-image: 
+                linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            transform-origin: 0 0;
+        }
+        svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .app-box {
+            position: absolute;
+            background: rgba(30, 35, 60, 0.9);
+            border: 2px solid;
+            padding: 15px;
+            cursor: move;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .app-box:hover { box-shadow: 0 12px 40px rgba(99, 102, 241, 0.4); }
+        .app-box.selected { box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5); }
+        .app-box.rectangle { border-radius: 12px; }
+        .app-box.circle { border-radius: 50%; }
+        .app-box.rounded { border-radius: 20px; }
+        .app-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+        .app-name { font-weight: 600; font-size: 14px; margin-bottom: 5px; text-align: center; }
+        .app-description { font-size: 11px; color: rgba(224, 230, 237, 0.6); text-align: center; }
+        .connection-point {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            background: #6366f1;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 100;
+        }
+        .connection-point:hover { transform: scale(1.8); background: #8b5cf6; }
+        .connection-point.top { top: -7px; left: 50%; margin-left: -7px; }
+        .connection-point.right { right: -7px; top: 50%; margin-top: -7px; }
+        .connection-point.bottom { bottom: -7px; left: 50%; margin-left: -7px; }
+        .connection-point.left { left: -7px; top: 50%; margin-top: -7px; }
+        .delete-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            background: rgba(239, 68, 68, 0.2);
+            border-radius: 6px;
+            color: #ef4444;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+        }
+        .app-box:hover .delete-btn { opacity: 1; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: linear-gradient(135deg, #1e2340 0%, #2d3250 100%);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-title { font-size: 24px; font-weight: 700; margin-bottom: 25px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; color: #a5b4fc; }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            background: rgba(15, 20, 40, 0.6);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 8px;
+            color: #e0e6ed;
+            font-size: 14px;
+        }
+        .form-group input:focus, .form-group textarea:focus { outline: none; border-color: #6366f1; }
+        .form-group textarea { resize: vertical; min-height: 80px; }
+        .color-picker-group { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .color-option { width: 40px; height: 40px; border-radius: 8px; cursor: pointer; border: 3px solid transparent; }
+        .color-option.selected { border-color: white; }
+        .shape-picker-group { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .shape-option {
+            padding: 12px;
+            background: rgba(15, 20, 40, 0.6);
+            border: 2px solid rgba(99, 102, 241, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .shape-option.selected { border-color: #6366f1; background: rgba(99, 102, 241, 0.3); }
+        .modal-actions { display: flex; gap: 10px; margin-top: 25px; }
+        .modal-actions .btn { flex: 1; }
+        .search-result {
+            padding:12px;
+            background:rgba(15,20,40,0.6);
+            border:1px solid rgba(99,102,241,0.3);
+            border-radius:8px;
+            margin-bottom:10px;
+            cursor:pointer;
+            display:flex;
+            align-items:center;
+            gap:12px;
+        }
+        .search-result:hover {
+            background:rgba(99,102,241,0.2);
+            transform:translateX(5px);
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button class="btn" onclick="addApp()">+ Add App</button>
+        <button class="btn btn-secondary" onclick="toggleConnect()" id="connectBtn">Connect: OFF</button>
+        <button class="btn btn-secondary" onclick="showFind()">🔍 Find</button>
+        <div style="width:1px;height:30px;background:rgba(99,102,241,0.3);margin:0 10px"></div>
+        <button class="btn btn-secondary" onclick="zoomOut()">−</button>
+        <span style="min-width:50px;text-align:center;font-size:12px" id="zoomTxt">100%</span>
+        <button class="btn btn-secondary" onclick="zoomIn()">+</button>
+        <button class="btn btn-secondary" onclick="resetZoom()">Reset</button>
+        <div style="width:1px;height:30px;background:rgba(99,102,241,0.3);margin:0 10px"></div>
+        <button class="btn btn-secondary" onclick="clearAll()">Clear All</button>
+        <button class="btn btn-danger" onclick="deleteSelected()">Delete</button>
+    </div>
+
+    <div class="canvas-container">
+        <div class="canvas" id="canvas">
+            <svg id="svg"></svg>
+        </div>
+    </div>
+
+    <div class="modal" id="findModal">
+        <div class="modal-content">
+            <div class="modal-title">Find App</div>
+            <div class="form-group">
+                <label>Search by name</label>
+                <input type="text" id="searchInput" placeholder="Type app name..." oninput="searchApps()">
+            </div>
+            <div id="searchResults" style="max-height:300px;overflow-y:auto"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeFind()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <div class="modal-title">Configure App</div>
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="appName" placeholder="App Name">
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="appDesc"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Icon</label>
+                <input type="text" id="appIcon" placeholder="📦" maxlength="2">
+            </div>
+            <div class="form-group">
+                <label>Shape</label>
+                <div class="shape-picker-group">
+                    <div class="shape-option selected" data-shape="rectangle">Rectangle</div>
+                    <div class="shape-option" data-shape="circle">Circle</div>
+                    <div class="shape-option" data-shape="rounded">Rounded</div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Width</label>
+                <input type="range" id="appWidth" min="100" max="300" value="160" style="width:100%">
+            </div>
+            <div class="form-group">
+                <label>Height</label>
+                <input type="range" id="appHeight" min="80" max="300" value="120" style="width:100%">
+            </div>
+            <div class="form-group">
+                <label>Color</label>
+                <div class="color-picker-group">
+                    <div class="color-option selected" style="background:#6366f1" data-color="#6366f1"></div>
+                    <div class="color-option" style="background:#8b5cf6" data-color="#8b5cf6"></div>
+                    <div class="color-option" style="background:#ec4899" data-color="#ec4899"></div>
+                    <div class="color-option" style="background:#10b981" data-color="#10b981"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn" onclick="saveApp()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let apps = [], connections = [], selectedApp = null, editingApp = null;
+        let connectMode = false, connectStart = null, dragging = null;
+        let selectedColor = '#6366f1', selectedShape = 'rectangle', idCounter = 0;
+        let zoomLevel = 1;
+        let isPanning = false, panStart = {x: 0, y: 0};
+
+        const container = document.querySelector('.canvas-container');
+        const canvas = document.getElementById('canvas');
+
+        // Pan functionality
+        canvas.addEventListener('mousedown', e => {
+            if(e.target === canvas || e.target.id === 'svg') {
+                isPanning = true;
+                panStart = {
+                    x: e.clientX + container.scrollLeft,
+                    y: e.clientY + container.scrollTop
+                };
+                container.classList.add('panning');
+            }
+        });
+
+        document.addEventListener('mousemove', e => {
+            if(isPanning) {
+                e.preventDefault();
+                container.scrollLeft = panStart.x - e.clientX;
+                container.scrollTop = panStart.y - e.clientY;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if(isPanning) {
+                isPanning = false;
+                container.classList.remove('panning');
+            }
+        });
+
+        document.querySelectorAll('.color-option').forEach(o => {
+            o.onclick = () => {
+                document.querySelectorAll('.color-option').forEach(x => x.classList.remove('selected'));
+                o.classList.add('selected');
+                selectedColor = o.dataset.color;
+            };
+        });
+
+        document.querySelectorAll('.shape-option').forEach(o => {
+            o.onclick = () => {
+                document.querySelectorAll('.shape-option').forEach(x => x.classList.remove('selected'));
+                o.classList.add('selected');
+                selectedShape = o.dataset.shape;
+            };
+        });
+
+        function addApp() {
+            editingApp = null;
+            document.getElementById('appName').value = '';
+            document.getElementById('appDesc').value = '';
+            document.getElementById('appIcon').value = '📦';
+            document.getElementById('appWidth').value = '160';
+            document.getElementById('appHeight').value = '120';
+            document.querySelectorAll('.color-option').forEach((o,i) => o.classList.toggle('selected', i===0));
+            document.querySelectorAll('.shape-option').forEach((o,i) => o.classList.toggle('selected', i===0));
+            selectedColor = '#6366f1';
+            selectedShape = 'rectangle';
+            document.getElementById('modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+        function saveApp() {
+            const name = document.getElementById('appName').value || 'App';
+            const desc = document.getElementById('appDesc').value || '';
+            const icon = document.getElementById('appIcon').value || '📦';
+            const width = parseInt(document.getElementById('appWidth').value);
+            const height = parseInt(document.getElementById('appHeight').value);
+
+            if (editingApp) {
+                Object.assign(editingApp, {name, description:desc, icon, color:selectedColor, shape:selectedShape, width, height});
+                updateBox(editingApp);
+            } else {
+                const app = {id:idCounter++, name, description:desc, icon, color:selectedColor, shape:selectedShape, width, height, x:500, y:500};
+                apps.push(app);
+                createBox(app);
+            }
+            closeModal();
+        }
+
+        function createBox(app) {
+            const box = document.createElement('div');
+            box.className = 'app-box ' + app.shape;
+            box.id = 'app-'+app.id;
+            box.style.left = app.x+'px';
+            box.style.top = app.y+'px';
+            box.style.width = app.width+'px';
+            box.style.height = app.height+'px';
+            box.style.borderColor = app.color;
+            box.innerHTML = `
+                <div class="delete-btn" onclick="event.stopPropagation();deleteApp(${app.id})">×</div>
+                <div class="app-icon" style="background:${app.color}33;color:${app.color}">${app.icon}</div>
+                <div class="app-name">${app.name}</div>
+                <div class="app-description">${app.description}</div>
+                <div class="connection-point top" data-id="${app.id}" data-pos="top"></div>
+                <div class="connection-point right" data-id="${app.id}" data-pos="right"></div>
+                <div class="connection-point bottom" data-id="${app.id}" data-pos="bottom"></div>
+                <div class="connection-point left" data-id="${app.id}" data-pos="left"></div>
+            `;
+            box.onmousedown = e => {
+                if(e.target.classList.contains('connection-point')||e.target.classList.contains('delete-btn')) return;
+                dragging = app;
+                if(selectedApp) document.getElementById('app-'+selectedApp.id)?.classList.remove('selected');
+                selectedApp = app;
+                box.classList.add('selected');
+                const rect = box.getBoundingClientRect();
+                const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+                const offset = {x:e.clientX-rect.left, y:e.clientY-rect.top};
+                const move = e => {
+                    const canvasR = document.getElementById('canvas').getBoundingClientRect();
+                    app.x = e.clientX - canvasR.left - offset.x;
+                    app.y = e.clientY - canvasR.top - offset.y;
+                    box.style.left = app.x+'px';
+                    box.style.top = app.y+'px';
+                    drawLines();
+                };
+                const up = () => {
+                    document.removeEventListener('mousemove', move);
+                    document.removeEventListener('mouseup', up);
+                    dragging = null;
+                };
+                document.addEventListener('mousemove', move);
+                document.addEventListener('mouseup', up);
+            };
+            box.ondblclick = e => {
+                if(!e.target.classList.contains('connection-point')) {
+                    editingApp = app;
+                    document.getElementById('appName').value = app.name;
+                    document.getElementById('appDesc').value = app.description;
+                    document.getElementById('appIcon').value = app.icon;
+                    document.getElementById('appWidth').value = app.width;
+                    document.getElementById('appHeight').value = app.height;
+                    document.querySelectorAll('.color-option').forEach(o => o.classList.toggle('selected', o.dataset.color===app.color));
+                    document.querySelectorAll('.shape-option').forEach(o => o.classList.toggle('selected', o.dataset.shape===app.shape));
+                    selectedColor = app.color;
+                    selectedShape = app.shape;
+                    document.getElementById('modal').classList.add('active');
+                }
+            };
+            box.querySelectorAll('.connection-point').forEach(p => {
+                p.onclick = e => {
+                    e.stopPropagation();
+                    if(!connectMode) return;
+                    const id = parseInt(p.dataset.id);
+                    const pos = p.dataset.pos;
+                    const a = apps.find(x => x.id===id);
+                    if(!connectStart) {
+                        connectStart = {app:a, pos};
+                    } else if(connectStart.app.id !== id) {
+                        connections.push({from:connectStart, to:{app:a, pos}});
+                        connectStart = null;
+                        drawLines();
+                    }
+                };
+            });
+            document.getElementById('canvas').appendChild(box);
+            
+            // Scroll to show the new app
+            const container = document.querySelector('.canvas-container');
+            container.scrollTo({
+                left: app.x - 200,
+                top: app.y - 200,
+                behavior: 'smooth'
+            });
+        }
+
+        function updateBox(app) {
+            const box = document.getElementById('app-'+app.id);
+            box.className = 'app-box ' + app.shape;
+            box.style.borderColor = app.color;
+            box.style.width = app.width+'px';
+            box.style.height = app.height+'px';
+            box.querySelector('.app-icon').style.background = app.color+'33';
+            box.querySelector('.app-icon').style.color = app.color;
+            box.querySelector('.app-icon').textContent = app.icon;
+            box.querySelector('.app-name').textContent = app.name;
+            box.querySelector('.app-description').textContent = app.description;
+            drawLines();
+        }
+
+        function deleteApp(id) {
+            apps = apps.filter(a => a.id!==id);
+            connections = connections.filter(c => c.from.app.id!==id && c.to.app.id!==id);
+            document.getElementById('app-'+id)?.remove();
+            drawLines();
+        }
+
+        function deleteSelected() {
+            if(selectedApp) deleteApp(selectedApp.id);
+            selectedApp = null;
+        }
+
+        function toggleConnect() {
+            connectMode = !connectMode;
+            document.getElementById('connectBtn').textContent = 'Connect: ' + (connectMode?'ON':'OFF');
+            connectStart = null;
+        }
+
+        function getPoint(app, pos) {
+            const box = document.getElementById('app-'+app.id);
+            if(!box) return {x:0,y:0};
+            const r = box.getBoundingClientRect();
+            const cx = r.left + r.width/2;
+            const cy = r.top + r.height/2;
+            if(pos==='top') return {x:cx, y:r.top};
+            if(pos==='right') return {x:r.right, y:cy};
+            if(pos==='bottom') return {x:cx, y:r.bottom};
+            return {x:r.left, y:cy};
+        }
+
+        function drawLines() {
+            const svg = document.getElementById('svg');
+            svg.innerHTML = '';
+            connections.forEach(c => {
+                const s = getPoint(c.from.app, c.from.pos);
+                const e = getPoint(c.to.app, c.to.pos);
+                const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+                line.setAttribute('x1', s.x);
+                line.setAttribute('y1', s.y);
+                line.setAttribute('x2', e.x);
+                line.setAttribute('y2', e.y);
+                line.setAttribute('stroke', c.from.app.color);
+                line.setAttribute('stroke-width', '2');
+                svg.appendChild(line);
+            });
+        }
+
+        function clearAll() {
+            if(confirm('Clear all?')) {
+                apps = [];
+                connections = [];
+                document.querySelectorAll('.app-box').forEach(b => b.remove());
+                drawLines();
+            }
+        }
+
+        function zoomIn() {
+            zoomLevel = Math.min(zoomLevel + 0.1, 2);
+            updateZoom();
+        }
+
+        function zoomOut() {
+            zoomLevel = Math.max(zoomLevel - 0.1, 0.3);
+            updateZoom();
+        }
+
+        function resetZoom() {
+            zoomLevel = 1;
+            updateZoom();
+        }
+
+        function updateZoom() {
+            document.getElementById('canvas').style.transform = 'scale('+zoomLevel+')';
+            document.getElementById('zoomTxt').textContent = Math.round(zoomLevel*100)+'%';
+            drawLines();
+        }
+
+        function showFind() {
+            document.getElementById('searchInput').value = '';
+            searchApps();
+            document.getElementById('findModal').classList.add('active');
+        }
+
+        function closeFind() {
+            document.getElementById('findModal').classList.remove('active');
+        }
+
+        function searchApps() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const results = document.getElementById('searchResults');
+            const filtered = apps.filter(a => a.name.toLowerCase().includes(query) || a.description.toLowerCase().includes(query));
+            
+            if(filtered.length === 0) {
+                results.innerHTML = '<div style="text-align:center;padding:20px;color:#64748b">No apps found</div>';
+                return;
+            }
+            
+            results.innerHTML = filtered.map(a => `
+                <div class="search-result" onclick="goToApp(${a.id})">
+                    <div style="width:40px;height:40px;border-radius:8px;background:${a.color}33;color:${a.color};display:flex;align-items:center;justify-content:center;font-size:20px">${a.icon}</div>
+                    <div style="flex:1">
+                        <div style="font-weight:600">${a.name}</div>
+                        <div style="font-size:11px;color:rgba(224,230,237,0.6)">${a.description || 'No description'}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function goToApp(id) {
+            const app = apps.find(a => a.id === id);
+            if(!app) return;
+            
+            closeFind();
+            
+            if(selectedApp) document.getElementById('app-'+selectedApp.id)?.classList.remove('selected');
+            selectedApp = app;
+            document.getElementById('app-'+app.id).classList.add('selected');
+            
+            const container = document.querySelector('.canvas-container');
+            container.scrollTo({
+                left: (app.x * zoomLevel) - (container.clientWidth / 2),
+                top: (app.y * zoomLevel) - (container.clientHeight / 2),
+                behavior: 'smooth'
+            });
+        }
+    </script>
+</body>
+</html>
